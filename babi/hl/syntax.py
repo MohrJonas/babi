@@ -10,8 +10,8 @@ from babi.buf import Buf
 from babi.color_manager import ColorManager
 from babi.highlight import Compiler
 from babi.highlight import Grammars
-from babi.highlight import highlight_line
 from babi.highlight import State
+from babi.highlight import highlight_line
 from babi.hl.interface import HL
 from babi.hl.interface import HLs
 from babi.theme import Theme

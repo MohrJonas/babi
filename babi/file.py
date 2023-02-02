@@ -11,7 +11,6 @@ import os.path
 import re
 from typing import Any
 from typing import Callable
-from typing import cast
 from typing import Generator
 from typing import IO
 from typing import Match
@@ -19,6 +18,7 @@ from typing import NamedTuple
 from typing import Pattern
 from typing import TYPE_CHECKING
 from typing import TypeVar
+from typing import cast
 
 from babi.buf import Buf
 from babi.buf import Modification
@@ -29,6 +29,7 @@ from babi.hl.replace import Replace
 from babi.hl.selection import Selection
 from babi.hl.syntax import Syntax
 from babi.hl.trailing_whitespace import TrailingWhitespace
+from babi.lsp import LSPClient
 from babi.prompt import PromptResult
 from babi.status import Status
 
@@ -38,6 +39,10 @@ if TYPE_CHECKING:
 TCallable = TypeVar('TCallable', bound=Callable[..., Any])
 
 WS_RE = re.compile(r'^\s*')
+
+LSP_SERVERS = {
+    "py": "pylsp"
+}
 
 
 def get_lines(sio: IO[str]) -> tuple[list[str], str, bool, str]:
@@ -114,6 +119,7 @@ def action(func: TCallable) -> TCallable:
     def action_inner(self: File, *args: Any, **kwargs: Any) -> Any:
         self.finalize_previous_action()
         return func(self, *args, **kwargs)
+
     return cast(TCallable, action_inner)
 
 
@@ -127,7 +133,9 @@ def edit_action(
         def edit_action_inner(self: File, *args: Any, **kwargs: Any) -> Any:
             with self.edit_action_context(name, final=final):
                 return func(self, *args, **kwargs)
+
         return cast(TCallable, edit_action_inner)
+
     return edit_action_decorator
 
 
@@ -136,6 +144,7 @@ def keep_selection(func: TCallable) -> TCallable:
     def keep_selection_inner(self: File, *args: Any, **kwargs: Any) -> Any:
         with self.select():
             return func(self, *args, **kwargs)
+
     return cast(TCallable, keep_selection_inner)
 
 
@@ -145,6 +154,7 @@ def clear_selection(func: TCallable) -> TCallable:
         ret = func(self, *args, **kwargs)
         self.selection.clear()
         return ret
+
     return cast(TCallable, clear_selection_inner)
 
 
@@ -174,9 +184,9 @@ class _SearchIter:
     def _stop_if_past_original(self, y: int, match: Match[str]) -> Found:
         if (
                 self.wrapped and (
-                    y > self._start_y or
-                    y == self._start_y and match.start() >= self._start_x
-                )
+                y > self._start_y or
+                y == self._start_y and match.start() >= self._start_x
+        )
         ):
             raise StopIteration()
         return Found(y, match)
@@ -236,6 +246,8 @@ class File:
         self._replace_hl = Replace()
         self.selection = Selection()
         self._file_hls: tuple[FileHL, ...] = ()
+        extension = filename.split(".")[-1]
+        self.lsp = LSPClient(LSP_SERVERS.get(extension)) if LSP_SERVERS.get(extension) is not None else None
 
     def ensure_loaded(
             self,
@@ -368,9 +380,9 @@ class File:
         elif self.buf.x == len(line):
             while (
                     self.buf.y < len(self.buf) - 1 and (
-                        self.buf.x == len(self.buf[self.buf.y]) or
-                        self.buf[self.buf.y][self.buf.x].isspace()
-                    )
+                    self.buf.x == len(self.buf[self.buf.y]) or
+                    self.buf[self.buf.y][self.buf.x].isspace()
+            )
             ):
                 self.buf.right(dim)
         # if we're inside the line, jump to next position that's not our type
@@ -527,8 +539,8 @@ class File:
         if self.buf.y > 0:
             offset = 1
             while (
-                self.buf[self.buf.y - offset] == '' and
-                self.buf.y - offset - 1 >= 0
+                    self.buf[self.buf.y - offset] == '' and
+                    self.buf.y - offset - 1 >= 0
             ):
                 offset += 1
             if offset >= 2:
@@ -537,8 +549,8 @@ class File:
                 self.buf.x = 0
                 return
             while (
-                self.buf[self.buf.y - offset - 1] != '' and
-                self.buf.y - offset - 1 >= 0
+                    self.buf[self.buf.y - offset - 1] != '' and
+                    self.buf.y - offset - 1 >= 0
             ):
                 offset += 1
             self.buf.y -= offset
@@ -594,13 +606,13 @@ class File:
     @clear_selection
     def delete(self, dim: Dim) -> None:
         if (
-            # noop at end of the file
-            self.buf.y == len(self.buf) - 1 or
-            # noop at end of last real line
-            (
-                self.buf.y == len(self.buf) - 2 and
-                self.buf.x == len(self.buf[self.buf.y])
-            )
+                # noop at end of the file
+                self.buf.y == len(self.buf) - 1 or
+                # noop at end of last real line
+                (
+                        self.buf.y == len(self.buf) - 2 and
+                        self.buf.x == len(self.buf[self.buf.y])
+                )
         ):
             pass
         # if we're at the end of the line, collapse the line afterwards
@@ -646,7 +658,7 @@ class File:
             tab_string = tab_string[:n]
         line = self.buf[self.buf.y]
         self.buf[self.buf.y] = (
-            line[:self.buf.x] + tab_string + line[self.buf.x:]
+                line[:self.buf.x] + tab_string + line[self.buf.x:]
         )
         self.buf.x += n
         self.buf.restore_eof_invariant()
@@ -911,6 +923,7 @@ class File:
         self.buf[self.buf.y] = s[:self.buf.x] + wch + s[self.buf.x:]
         self.buf.x += len(wch)
         self.buf.restore_eof_invariant()
+        self.lsp.change_document(len(self.undo_stack), self.nl.join(self.buf))
 
     def finalize_previous_action(self) -> None:
         assert not self._in_edit_action, 'nested edit/movement'
@@ -920,9 +933,9 @@ class File:
 
     def _continue_last_action(self, name: str) -> bool:
         return (
-            bool(self.undo_stack) and
-            self.undo_stack[-1].name == name and
-            not self.undo_stack[-1].final
+                bool(self.undo_stack) and
+                self.undo_stack[-1].name == name and
+                not self.undo_stack[-1].final
         )
 
     @contextlib.contextmanager

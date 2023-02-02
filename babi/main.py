@@ -6,6 +6,7 @@ import os
 import re
 import signal
 import sys
+from pathlib import Path
 from typing import Sequence
 
 from babi.buf import Buf
@@ -14,8 +15,8 @@ from babi.perf import Perf
 from babi.perf import perf_log
 from babi.screen import EditResult
 from babi.screen import FileInfo
-from babi.screen import make_stdscr
 from babi.screen import Screen
+from babi.screen import make_stdscr
 
 CONSOLE = 'CONIN$' if sys.platform == 'win32' else '/dev/tty'
 POSITION_RE = re.compile(r'^\+-?\d+$')
@@ -23,6 +24,14 @@ POSITION_RE = re.compile(r'^\+-?\d+$')
 
 def _edit(screen: Screen, stdin: str) -> EditResult:
     screen.file.ensure_loaded(screen.status, screen.layout.file, stdin)
+
+    # TODO select correct capabilities
+    init_result = screen.file.lsp.initialize({})
+    screen.file.lsp.initialized()
+    name = init_result["result"]["serverInfo"]["name"]
+    version = init_result["result"]["serverInfo"]["version"]
+    screen.status.update("{name}@{version} started".format(name=name, version=version))
+    screen.file.lsp.open_document(Path(screen.file.filename))
 
     while True:
         screen.status.tick(screen.layout.file)

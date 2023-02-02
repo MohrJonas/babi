@@ -71,6 +71,7 @@ SEQUENCE_KEYNAME = {
     '\x1b[1;6F': b'kEND6',  # Shift + ^End
     '\x1b[~': b'KEY_BTAB',  # Shift + Tab
 }
+
 KEYNAME_REWRITE = {
     # windows-curses: numeric pad arrow keys
     # - some overlay keyboards pick these as well
@@ -178,10 +179,86 @@ class Screen:
         self._buffered_input: int | str | None = None
         self._retheme = False
         self._linters = tuple(tp() for tp in LINTER_TYPES)
+        self.autocomplete_hints: list[dict] | None | str = None
+        self.autocomplete_selected: int  = 0
+        self.autocomplete_position: tuple[int, int] | None = None
 
     @property
     def file(self) -> File:
         return self.files[self.i]
+
+    @staticmethod
+    def requires_lsp(f):
+        def decorator(*args):
+            if args[0].file.lsp is not None:
+                return f(*args)
+
+        return decorator
+
+    @requires_lsp
+    def definition(self):
+        definition_result = self.file.lsp.get_definition(self.file.buf.y, self.file.buf.x)
+        if definition_result.get("result") is not None:
+            result = definition_result.get("result")
+            if len(result) != 0:
+                uri = definition_result["result"][0]["uri"]
+                position = definition_result["result"][0]["range"]["start"]
+                # TODO allow accessing other files
+                if self.file.lsp.opened_document.as_uri() == uri:
+                    self.file.go_to_line(position["line"] + 1, self.layout.file)
+                    self.file.buf.x = position["character"]
+            else:
+                self.status.update("No definition found")
+
+    @requires_lsp
+    def autocomplete(self):
+        self.autocomplete_hints = "Loading..."
+        completion_result = self.file.lsp.get_autocompletion(self.file.buf.y, self.file.buf.x)
+        if completion_result.get("result"):
+            result = completion_result.get("result")
+            if len(result) != 0:
+                self.autocomplete_hints = completion_result["result"]["items"]
+                self.autocomplete_position = (self.file.buf.y, self.file.buf.x)
+        else:
+            self.status.update("No autocompletion found")
+            self.autocomplete_hints = None
+
+    @requires_lsp
+    def autocomplete_down(self):
+        if self.autocomplete_hints is not None:
+            if self.autocomplete_selected < len(self.autocomplete_hints) - 1:
+                self.autocomplete_selected += 1
+
+    @requires_lsp
+    def autocomplete_up(self):
+        if self.autocomplete_hints is not None:
+            if self.autocomplete_selected > 0:
+                self.autocomplete_selected -= 1
+
+    @requires_lsp
+    def autocomplete_accept(self):
+        if type(self.autocomplete_hints) is list and self.autocomplete_position is not None:
+            self.file.c(self.autocomplete_hints[self.autocomplete_selected]["label"], self.layout.file)
+            self.autocomplete_hints = None
+
+    @requires_lsp
+    def _draw_autocomplete(self):
+        curses.init_pair(20, curses.COLOR_WHITE, curses.COLOR_CYAN)
+        if self.autocomplete_hints is not None:
+            if self.autocomplete_position[0] != self.file.buf.y or (
+                    len(self.file.buf[self.file.buf.y]) > self.file.buf.x and not re.compile("\\w").match(self.file.buf[self.file.buf.y][self.file.buf.x])):
+                self.autocomplete_hints = None
+                return
+            if type(self.autocomplete_hints) is str:
+                self.stdscr.addstr(self.file.buf.y + 1, self.file.buf.x, self.autocomplete_hints, curses.A_REVERSE)
+            else:
+                for index, hint in enumerate(self.autocomplete_hints):
+                    if self.autocomplete_selected == index:
+                        self.stdscr.addstr(self.file.buf.y + 2 + index, self.file.buf.x, hint["label"],
+                                           curses.color_pair(20))
+                    else:
+                        self.stdscr.addstr(self.file.buf.y + 2 + index, self.file.buf.x, hint["label"],
+                                           curses.A_REVERSE)
 
     def _draw_header(self, dim: Dim) -> None:
         filename = self.file.filename or '<<new file>>'
@@ -308,6 +385,7 @@ class Screen:
     def draw(self) -> None:
         self._draw_header(self.layout.header)
         self.file.draw(self.stdscr, self.layout.file)
+        self._draw_autocomplete()
         self.status.draw(self.stdscr, self.layout.status)
         self.file.lint_errors.draw(self.stdscr, self.layout.lint_errors)
 
@@ -746,7 +824,7 @@ class Screen:
             dir_path = os.path.dirname(os.path.abspath(self.file.filename))
             os.makedirs(dir_path, exist_ok=True)
             with open(
-                self.file.filename, 'w', encoding='UTF-8', newline='',
+                    self.file.filename, 'w', encoding='UTF-8', newline='',
             ) as f:
                 f.write(contents)
         except OSError as e:
@@ -836,6 +914,12 @@ class Screen:
         b'kLFT3': lambda screen: EditResult.PREV,
         b'kRIT3': lambda screen: EditResult.NEXT,
         b'^Z': background,
+        # TODO ist this the corret keycode?
+        b'^G': definition,
+        b'^@': autocomplete,
+        b'kDN7': autocomplete_down,
+        b'kUP7': autocomplete_up,
+        b'M-\r': autocomplete_accept
     }
 
     @contextlib.contextmanager
