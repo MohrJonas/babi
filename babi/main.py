@@ -26,20 +26,27 @@ def _edit(screen: Screen, stdin: str) -> EditResult:
     screen.file.ensure_loaded(screen.status, screen.layout.file, stdin)
 
     # TODO select correct capabilities
-    init_result = screen.file.lsp.initialize({})
-    screen.file.lsp.initialized()
-    name = init_result["result"]["serverInfo"]["name"]
-    version = init_result["result"]["serverInfo"]["version"]
-    screen.status.update("{name}@{version} started".format(name=name, version=version))
-    screen.file.lsp.open_document(Path(screen.file.filename))
+    if screen.file.lsp is not None:
+        screen.file.lsp.initialize({})
+        screen.file.lsp.initialized()
+        screen.file.lsp.open_document(Path(screen.file.filename))
 
     while True:
         screen.status.tick(screen.layout.file)
         screen.draw()
         screen.file.move_cursor(screen.stdscr, screen.layout.file)
-
         key = screen.get_char()
-        if key.keyname in File.DISPATCH:
+        keyname = key.keyname
+        if screen.file.autocomplete.active and keyname == b'KEY_UP':
+            screen.file.autocomplete.select_prev_suggestion()
+        elif screen.file.autocomplete.active and keyname == b'KEY_DOWN':
+            screen.file.autocomplete.select_next_suggestion()
+        elif screen.file.autocomplete.active and keyname == b'^M':
+            # TODO actually insert the completion
+            screen.file.autocomplete.stop_completion()
+        elif screen.file.autocomplete.active and keyname == b'^C':
+            screen.file.autocomplete.stop_completion()
+        elif key.keyname in File.DISPATCH:
             File.DISPATCH[key.keyname](screen.file, screen.layout.file)
         elif key.keyname in Screen.DISPATCH:
             ret = Screen.DISPATCH[key.keyname](screen)
@@ -47,6 +54,10 @@ def _edit(screen: Screen, stdin: str) -> EditResult:
                 return ret
         elif key.keyname == b'STRING':
             assert isinstance(key.wch, str), key.wch
+            if screen.file.autocomplete.active:
+                screen.file.autocomplete.fetch_suggestions(screen.file.lsp)
+            #elif not re.compile("\\w").match(key.wch):
+            #    screen.start_autocomplete()
             screen.file.c(key.wch, screen.layout.file)
         else:
             screen.status.update(f'unknown key: {key}')

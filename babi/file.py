@@ -9,7 +9,7 @@ import io
 import itertools
 import os.path
 import re
-from typing import Any
+from typing import Any, Optional
 from typing import Callable
 from typing import Generator
 from typing import IO
@@ -19,9 +19,11 @@ from typing import Pattern
 from typing import TYPE_CHECKING
 from typing import TypeVar
 from typing import cast
+from babi.auto_complete import AutoComplete
 
 from babi.buf import Buf
 from babi.buf import Modification
+from babi.diagnostics import Diagnostics
 from babi.dim import Dim
 from babi.hl.interface import FileHL
 from babi.hl.lint_errors import LintErrors
@@ -30,6 +32,7 @@ from babi.hl.selection import Selection
 from babi.hl.syntax import Syntax
 from babi.hl.trailing_whitespace import TrailingWhitespace
 from babi.lsp import LSPClient
+from babi.progress_manager import ProgressManager
 from babi.prompt import PromptResult
 from babi.status import Status
 
@@ -40,8 +43,11 @@ TCallable = TypeVar('TCallable', bound=Callable[..., Any])
 
 WS_RE = re.compile(r'^\s*')
 
-LSP_SERVERS = {
-    "py": "pylsp"
+LSP_SERVERS: dict[str, list[str]] = {
+    "py": ["pylsp"],
+    "html": ["html-languageserver", "--stdio"],
+    "htm": ["html-languageserver", "--stdio"],
+    "xhtml": ["html-languageserver", "--stdio"]
 }
 
 
@@ -186,7 +192,7 @@ class _SearchIter:
                 self.wrapped and (
                 y > self._start_y or
                 y == self._start_y and match.start() >= self._start_x
-        )
+                )
         ):
             raise StopIteration()
         return Found(y, match)
@@ -246,8 +252,16 @@ class File:
         self._replace_hl = Replace()
         self.selection = Selection()
         self._file_hls: tuple[FileHL, ...] = ()
-        extension = filename.split(".")[-1]
-        self.lsp = LSPClient(LSP_SERVERS.get(extension)) if LSP_SERVERS.get(extension) is not None else None
+        self.lsp: Optional[LSPClient] = None
+        if filename is not None:
+            extension = filename.split(".")[-1]
+            server = LSP_SERVERS.get(extension)
+            if server is not None:
+                self.lsp = LSPClient(server)
+        self.autocomplete: AutoComplete = AutoComplete()
+        self.diagnostics: Diagnostics = Diagnostics()
+        self.progressManager: ProgressManager = ProgressManager()
+    
 
     def ensure_loaded(
             self,
@@ -382,7 +396,7 @@ class File:
                     self.buf.y < len(self.buf) - 1 and (
                     self.buf.x == len(self.buf[self.buf.y]) or
                     self.buf[self.buf.y][self.buf.x].isspace()
-            )
+                    )
             ):
                 self.buf.right(dim)
         # if we're inside the line, jump to next position that's not our type
@@ -610,8 +624,8 @@ class File:
                 self.buf.y == len(self.buf) - 1 or
                 # noop at end of last real line
                 (
-                        self.buf.y == len(self.buf) - 2 and
-                        self.buf.x == len(self.buf[self.buf.y])
+                    self.buf.y == len(self.buf) - 2 and
+                    self.buf.x == len(self.buf[self.buf.y])
                 )
         ):
             pass
@@ -658,7 +672,7 @@ class File:
             tab_string = tab_string[:n]
         line = self.buf[self.buf.y]
         self.buf[self.buf.y] = (
-                line[:self.buf.x] + tab_string + line[self.buf.x:]
+            line[:self.buf.x] + tab_string + line[self.buf.x:]
         )
         self.buf.x += n
         self.buf.restore_eof_invariant()
@@ -923,7 +937,8 @@ class File:
         self.buf[self.buf.y] = s[:self.buf.x] + wch + s[self.buf.x:]
         self.buf.x += len(wch)
         self.buf.restore_eof_invariant()
-        self.lsp.change_document(len(self.undo_stack), self.nl.join(self.buf))
+        if self.lsp is not None:
+            self.lsp.change_document(self.nl.join(self.buf))
 
     def finalize_previous_action(self) -> None:
         assert not self._in_edit_action, 'nested edit/movement'
@@ -933,9 +948,9 @@ class File:
 
     def _continue_last_action(self, name: str) -> bool:
         return (
-                bool(self.undo_stack) and
-                self.undo_stack[-1].name == name and
-                not self.undo_stack[-1].final
+            bool(self.undo_stack) and
+            self.undo_stack[-1].name == name and
+            not self.undo_stack[-1].final
         )
 
     @contextlib.contextmanager
