@@ -15,8 +15,8 @@ from babi.perf import Perf
 from babi.perf import perf_log
 from babi.screen import EditResult
 from babi.screen import FileInfo
-from babi.screen import Screen
 from babi.screen import make_stdscr
+from babi.screen import Screen
 
 CONSOLE = 'CONIN$' if sys.platform == 'win32' else '/dev/tty'
 POSITION_RE = re.compile(r'^\+-?\d+$')

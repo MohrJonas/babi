@@ -3,15 +3,19 @@ from __future__ import annotations
 import curses
 import functools
 import math
+import os
+from pathlib import Path
 from typing import Callable
 from typing import NamedTuple
+
+import babi_grammars
 
 from babi.buf import Buf
 from babi.color_manager import ColorManager
 from babi.highlight import Compiler
 from babi.highlight import Grammars
-from babi.highlight import State
 from babi.highlight import highlight_line
+from babi.highlight import State
 from babi.hl.interface import HL
 from babi.hl.interface import HLs
 from babi.theme import Theme
@@ -148,7 +152,7 @@ class Syntax(NamedTuple):
             stdscr: curses._CursesWindow,
             color_manager: ColorManager,
     ) -> Syntax:
-        grammars = Grammars(prefix_data('grammar_v1'), xdg_data('grammar_v1'))
+        grammars = Grammars(prefix_data('grammar_v1'), xdg_data('grammar_v1'), Path(babi_grammars.__spec__.origin).parent.joinpath('share/babi/grammar_v1'))
         theme = Theme.from_filename(xdg_config('theme.json'))
         ret = cls(grammars, theme, color_manager)
         ret._init_screen(stdscr)

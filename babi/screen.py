@@ -4,13 +4,13 @@ import contextlib
 import curses
 import enum
 import hashlib
-from json import dumps
 import os
 import re
 import signal
 import sre_parse
 import subprocess
 import sys
+from json import dumps
 from types import FrameType
 from typing import Callable
 from typing import Generator
@@ -27,7 +27,7 @@ from babi.history import History
 from babi.hl.syntax import Syntax
 from babi.linters.flake8 import Flake8
 from babi.linters.pre_commit import PreCommit
-from babi.lsp import LSPClient, requires_lsp
+from babi.lsp import requires_lsp
 from babi.perf import Perf
 from babi.proc import graceful_terminate
 from babi.prompt import Prompt
@@ -185,34 +185,35 @@ class Screen:
             self.file.lsp.register_listener(lambda content: self.handle_listener(content))
 
     def handle_listener(self, content: dict) -> None:
-        match content.get("method"):
-            case "textDocument/publishDiagnostics":
-                self.file.diagnostics.diagnostics = content["params"]
-            case "$/progress":
-                match content["params"]["value"]["kind"]:
-                    case "begin":
-                        self.file.progressManager.add_progress(content["params"]["token"], content["params"]["value"]["title"])
-                    case "end":
-                        self.file.progressManager.set_completed(content["params"]["token"])
-            case "textDocument/definition":
-                definition = content["result"]
+        match content.get('method'):
+            case 'textDocument/publishDiagnostics':
+                self.file.diagnostics.diagnostics = content['params']
+            case '$/progress':
+                match content['params']['value']['kind']:
+                    case 'begin':
+                        self.file.progressManager.add_progress(content['params']['token'], content['params']['value']['title'])
+                    case 'end':
+                        self.file.progressManager.set_completed(content['params']['token'])
+            case 'textDocument/definition':
+                definition = content['result']
                 if len(definition) != 0:
-                    uri = definition[0]["uri"]
-                    position = definition[0]["range"]["start"]
+                    uri = definition[0]['uri']
+                    position = definition[0]['range']['start']
                     # TODO allow accessing other files
                     if self.file.file.lsp.opened_document.as_uri() == uri:
-                        self.file.file.go_to_line(position["line"] + 1, self.file.layout.file)
-                        self.file.file.buf.x = position["character"]
+                        self.file.file.go_to_line(position['line'] + 1, self.file.layout.file)
+                        self.file.file.buf.x = position['character']
                     else:
-                        self.status.update("Definition is in external file {uri}".format(uri=uri))
+                        self.status.update(f'Definition is in external file {uri}')
                 else:
-                    self.status.update("No definition found")
+                    self.status.update('No definition found')
             case None:
                 # Assume it's a code completion hint
-                if "isIncomplete" in dumps(content):
-                    self.file.autocomplete.suggestions = content["result"]["items"]
+                if 'isIncomplete' in dumps(content):
+                    self.file.autocomplete.suggestions = content['result']['items']
+                    self.draw()
                 # Assume it's a initialisation response
-                elif "capabilities" in dumps(content):
+                elif 'capabilities' in dumps(content):
                     pass
             case _:
                 self.status.update(content)

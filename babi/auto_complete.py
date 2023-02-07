@@ -1,15 +1,18 @@
+from __future__ import annotations
+
+import curses
+from textwrap import shorten
 from typing import Optional
 
 from babi.lsp import LSPClient
-import curses
 
 
 class AutoComplete:
 
     def __init__(self) -> None:
         self.active: bool = False
-        self.activation_position: Optional[tuple[int, int]] = None
-        self.suggestions: Optional[list[dict]] = None
+        self.activation_position: tuple[int, int] | None = None
+        self.suggestions: list[dict] | None = None
         self.selected_suggestion_index: int = 0
         curses.init_pair(20, curses.COLOR_WHITE, curses.COLOR_CYAN)
 
@@ -45,18 +48,17 @@ class AutoComplete:
         assert self.suggestions is not None and self.active
         show_above = position[0] > int(screen_height / 2)
         suggestion_display_amount = min(len(self.suggestions), int(screen_height / 2) - 2)
-        #print(max(0, self.selected_suggestion_index - suggestion_display_amount))
-        #print(min(len(self.suggestions), self.selected_suggestion_index + suggestion_display_amount))
-        #print(self.suggestions[max(0, self.selected_suggestion_index - suggestion_display_amount):min(len(self.suggestions) - 1, self.selected_suggestion_index + suggestion_display_amount)])
         for index, suggestion in enumerate(self.suggestions[max(0, self.selected_suggestion_index - suggestion_display_amount):min(len(self.suggestions), self.selected_suggestion_index + suggestion_display_amount)]):
-            text = suggestion["label"][:screen_width - len(suggestion["label"]) - 1]
+            text = suggestion['label']
+            if len(text) + position[1] > screen_width - 1:
+                text = shorten(text, screen_width - 1 - position[1], placeholder="...")
             if show_above:
                 if index == 0:
-                    screen.addstr(position[0] - 2 - index, position[0], text, curses.color_pair(20))
+                    screen.addstr(position[0] - 1 - index, position[0], text, curses.color_pair(20))
                 else:
-                    screen.addstr(position[0] - 2 - index, position[0], text, curses.A_REVERSE)
+                    screen.addstr(position[0] - 1 - index, position[0], text, curses.A_REVERSE)
             else:
                 if index == 0:
-                    screen.addstr(position[0] + 2 + index, position[0], text, curses.color_pair(20))
+                    screen.addstr(position[0] + 1 + index, position[0], text, curses.color_pair(20))
                 else:
-                    screen.addstr(position[0] + 2 + index, position[0], text, curses.A_REVERSE)
+                    screen.addstr(position[0] + 1 + index, position[0], text, curses.A_REVERSE)

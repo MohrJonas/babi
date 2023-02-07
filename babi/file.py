@@ -9,18 +9,19 @@ import io
 import itertools
 import os.path
 import re
-from typing import Any, Optional
+from typing import Any
 from typing import Callable
+from typing import cast
 from typing import Generator
 from typing import IO
 from typing import Match
 from typing import NamedTuple
+from typing import Optional
 from typing import Pattern
 from typing import TYPE_CHECKING
 from typing import TypeVar
-from typing import cast
-from babi.auto_complete import AutoComplete
 
+from babi.auto_complete import AutoComplete
 from babi.buf import Buf
 from babi.buf import Modification
 from babi.diagnostics import Diagnostics
@@ -44,10 +45,10 @@ TCallable = TypeVar('TCallable', bound=Callable[..., Any])
 WS_RE = re.compile(r'^\s*')
 
 LSP_SERVERS: dict[str, list[str]] = {
-    "py": ["pylsp"],
-    "html": ["html-languageserver", "--stdio"],
-    "htm": ["html-languageserver", "--stdio"],
-    "xhtml": ["html-languageserver", "--stdio"]
+    'py': ['pylsp'],
+    'html': ['html-languageserver', '--stdio'],
+    'htm': ['html-languageserver', '--stdio'],
+    'xhtml': ['html-languageserver', '--stdio'],
 }
 
 
@@ -252,16 +253,15 @@ class File:
         self._replace_hl = Replace()
         self.selection = Selection()
         self._file_hls: tuple[FileHL, ...] = ()
-        self.lsp: Optional[LSPClient] = None
-        if filename is not None:
-            extension = filename.split(".")[-1]
+        self.lsp: LSPClient | None = None
+        if filename is not None and os.path.lexists(filename):
+            extension = filename.split('.')[-1]
             server = LSP_SERVERS.get(extension)
             if server is not None:
                 self.lsp = LSPClient(server)
         self.autocomplete: AutoComplete = AutoComplete()
         self.diagnostics: Diagnostics = Diagnostics()
         self.progressManager: ProgressManager = ProgressManager()
-    
 
     def ensure_loaded(
             self,
