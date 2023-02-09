@@ -3,14 +3,13 @@ from __future__ import annotations
 import curses
 from itertools import groupby
 from textwrap import shorten
-from typing import Optional
 
 from babi.buf import Buf
 
 
 class Diagnostics:
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.diagnostics: list[dict] | None = None
         curses.init_pair(19, curses.COLOR_RED, curses.COLOR_BLACK)
         curses.init_pair(18, curses.COLOR_YELLOW, curses.COLOR_BLACK)
@@ -21,7 +20,7 @@ class Diagnostics:
     def clamp(to_clamp: int, range_min: int, range_max: int) -> int:
         return min(max(to_clamp, range_min), range_max)
 
-    def draw(self, screen, y_offset: int, screen_width: int, screen_height: int, buf: Buf):
+    def draw(self, screen, y_offset: int, screen_width: int, screen_height: int, buf: Buf) -> None:
         assert self.diagnostics is not None
         screen_clamped_diagnostics = filter(lambda diagnostic: int(diagnostic['range']['start']['line']) in range(y_offset + 1, y_offset + screen_height), self.diagnostics['diagnostics'])
         for line_num, line_grouped_diagnostics in groupby(screen_clamped_diagnostics, lambda diagnostic: int(diagnostic['range']['start']['line'])):
@@ -29,7 +28,10 @@ class Diagnostics:
             line_grouped_diagnostics = list(line_grouped_diagnostics)
             # TODO sometimes this goes out of range, therefore it gets clamped, have to find out why and fix it
             #line_num = self.clamp(line_num, 0, len(buf))
-            line_length = len(buf[line_num])
+            try:
+                line_length = len(buf[line_num])
+            except IndexError:
+                continue
             if len(line_grouped_diagnostics) == 1:
                 message = line_grouped_diagnostics[0]['message']
             else:
@@ -53,4 +55,4 @@ class Diagnostics:
                 # No severity, white color
                 case _:
                     color = curses.color_pair(16)
-            screen.addstr(line_num - y_offset, line_length, message, color)
+            screen.addstr(line_num - y_offset, line_length + 1, message, color)

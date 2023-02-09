@@ -3,7 +3,7 @@ from __future__ import annotations
 from functools import wraps
 from json import dumps
 from json import loads
-from os import getpid
+from os import getpid, environ
 from pathlib import Path
 from subprocess import PIPE
 from subprocess import Popen
@@ -70,13 +70,15 @@ class LSPClient(Thread):
         content = self.process.stdout.read(content_size).decode('utf-8')
         return content
 
+    # TODO maybe change the way workspaces are declared
     def initialize(self, capabilities: dict) -> None:
+        workspaceFolders = [environ["WORKSPACE_ROOT"]] if environ.get("WORKSPACE_ROOT") is not None else []
         message = self.__build_message(
             'initialize',
             {
                 'processId': getpid(), 'clientInfo': {'client': 'babi', 'version': '1.0'},
                 'locale': 'en', 'capabilities': capabilities, 'trace': 'verbose',
-                'workspaceFolders': None,
+                'workspaceFolders': workspaceFolders,
             },
         )
         self.message_id += 1

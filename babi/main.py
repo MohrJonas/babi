@@ -27,7 +27,16 @@ def _edit(screen: Screen, stdin: str) -> EditResult:
 
     # TODO select correct capabilities
     if screen.file.lsp is not None:
-        screen.file.lsp.initialize({})
+        screen.file.lsp.initialize({
+            "workspaceFolders": True,
+            "textDocument": {
+                "completion": {
+                    "documentationFormat": ["plaintext"],
+                    "insertTextModeSupport": [1],
+                    
+                }
+            }
+        })
         screen.file.lsp.initialized()
         screen.file.lsp.open_document(Path(screen.file.filename))
 

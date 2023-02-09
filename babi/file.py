@@ -9,6 +9,7 @@ import io
 import itertools
 import os.path
 import re
+from json import loads
 from typing import Any
 from typing import Callable
 from typing import cast
@@ -37,7 +38,6 @@ from babi.progress_manager import ProgressManager
 from babi.prompt import PromptResult
 from babi.status import Status
 from babi.user_data import xdg_config
-from json import loads
 
 if TYPE_CHECKING:
     from babi.main import Screen  # XXX: circular
@@ -46,7 +46,7 @@ TCallable = TypeVar('TCallable', bound=Callable[..., Any])
 
 WS_RE = re.compile(r'^\s*')
 
-LSP_SERVERS = loads(open(xdg_config("lsp.json")).read()) if os.path.lexists(xdg_config("lsp.json")) else {}
+LSP_SERVERS = loads(open(xdg_config('lsp.json')).read()) if os.path.lexists(xdg_config('lsp.json')) else {}
 
 
 def get_lines(sio: IO[str]) -> tuple[list[str], str, bool, str]:

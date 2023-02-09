@@ -216,7 +216,8 @@ class Screen:
                 elif 'capabilities' in dumps(content):
                     pass
             case _:
-                self.status.update(content)
+                print(content)
+                # self.status.update(content)
 
     @property
     def file(self) -> File:
